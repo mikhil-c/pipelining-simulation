@@ -1,4 +1,5 @@
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <sstream>
 #include <cstdint>
@@ -87,17 +88,19 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
 
     // extracting opcode
     opcode = instruction;
-
-    int _rd,_opcode;
-    // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
     bool RAW = false;
-    for(int j = 2 ; j < 5 ; j++){ // the earlier the better 
-        _opcode = instruction_metadata[j].first;
-        _rd = instruction_metadata[j].second;
-        if(_opcode <= 11 && (_rd == rs1 || _rd == rs2) && _rd !=0 ){ // dont stall if _rd = 0
-            RAW  = true;
-            stall_count = 5 - j;
-            break; 
+    if(opcode < 10 || opcode == 12 || opcode == 14){ // if arithmetic, store or branch
+        int _rd,_opcode;
+        // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
+        for(int j = 2 ; j < 5 ; j++){ // the earlier the better 
+            _opcode = instruction_metadata[j].first;
+            _rd = instruction_metadata[j].second;
+
+            if(_opcode <= 11 && (_rd == rs1 || _rd == rs2) && _rd !=0 ){ // dont stall if _rd = 0
+                RAW  = true;
+                stall_count = 5 - j;
+                break; 
+            }
         }
     }
     // storing the output in the temporary registers
@@ -231,7 +234,11 @@ void simulate(std::string directory) {
     // local variables
     int opcode, rd, rs2, rs1;
 
-    while(!halt && clock < 25){
+    for(int j = 0; j < 5; j++){
+        instruction_metadata[j] = get_metadata(ICache[0]);
+    }
+
+    while(!halt){
         // all instructions except IF run as usual
 
         // writeback stage
@@ -265,8 +272,9 @@ void simulate(std::string directory) {
         }
 
         // decode stage
-        if(clock > 0){opcode = instruction_metadata[1].first;
-        rd = instruction_metadata[1].second;
+        if(clock > 0){
+            opcode = instruction_metadata[1].first;
+            rd = instruction_metadata[1].second;
 
             decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
         }
@@ -281,6 +289,7 @@ void simulate(std::string directory) {
             instruction_metadata[0] = get_metadata(ICache[PC]); // to ensure correctness
         }
         clock++;
+        std::cout<< IR <<std::endl;
     }
 
     // setup outputfiles 
@@ -290,14 +299,17 @@ void simulate(std::string directory) {
     // write data
     fill_data_cache(dcache_output, DCache);
     fill_output(output, output_metrics);
+    
 }
 
 int main() {
-    std::string path = "./input";
+
+    simulate("Arith");
+    /*std::string path = "./input";
     for (auto& entry : std::filesystem::directory_iterator(path)) {
         if (entry.is_directory()) {
             std::string directory = entry.path().filename().string();
             simulate(directory);
         }
-    }
+    }*/
 }
