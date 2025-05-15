@@ -108,7 +108,7 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, in
         case 10: int8_t imm = (rs1 << 4) + rs2;        // LI
                  ALUOuput = imm;
                  break;                                
-        case 11:                                       
+        case 11:                                  
         case 12: ALUOuput = A + get_imm_4(rs2); break; // LD & ST
         case 13: int8_t imm = (rd << 4) + rs1;         // JMP
                  PC += imm;
@@ -145,19 +145,46 @@ void write_back(int8_t RF[], int& rd, int& opcode, const int8_t& ALUOutput, cons
 void simulate(std::string directory){
     int ICache[128];
     int8_t RF[16], DCache[256];
-    int output_metrics[13];
+    int output_metrics[12]; // to be filled manually
     int PC, IR;
+    int stall_count, clock; // stall_count to see if the processor is stalled, clock to count clock cycle 
+    bool halt;
     // taking input 
     std::ifstream dcache("./input/"+ directory + "/DCache.txt");
     std::ifstream icache("./input/"+ directory + "/ICache.txt");
-    std::ifstream rfile("./input"+ directory + "RF.txt");
+    std::ifstream rfile("./input"+ directory + "/RF.txt");
 
-    // simulation 
+    // fetch data
+
+    get_data(true, icache, ICache);
+    get_data(false, dcache, DCache);
+    get_data(false, rfile, RF);
     
+    std::vector<std::pair<int,int>> instruction_metadata(5); // to store the metadata of instruction in 
+    /*
+        0: IF Stage
+        1: ID stage 
+        2: EXE stage
+        3: MEM stage 
+        4: WB stage
 
+        in every clock cycle transfer the metadata to the next stage for the same instructions
+    */
 
-    std::ofstream dcache_output("./output" + directory + "DCache.txt");
-    std::ofstream output("./output" + directory + "Output.txt");
+    while(!halt){
+
+    }
+
+    // setup outputfiles 
+
+    std::ofstream dcache_output("./output" + directory + "/DCache.txt");
+    std::ofstream output("./output" + directory + "/Output.txt");
+
+    //write data
+
+    fill_data_cache(dcache_output, DCache);
+    fill_output(output, output_metrics);
+
     // 5 element queue to store output registers of perv 
 
     // 5 element array 
