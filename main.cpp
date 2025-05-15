@@ -91,12 +91,13 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
     // extracting opcode
     opcode = instruction;
 
-    int _rd;
+    int _rd,_opcode;
     // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
     bool RAW = false;
     for(int j = 2 ; j < 5 ; j++){ // the earlier the better 
+        _opcode = instruction_metadata[j].first;
         _rd = instruction_metadata[j].second;
-        if(_rd == rs1 || _rd == rs2){
+        if(_opcode <= 11 && (_rd == rs1 || _rd == rs2) && _rd !=0 ){ // dont stall if _rd = 0
             RAW  = true;
             stall_count = 5 - j;
             break; 
@@ -155,6 +156,7 @@ void memory(int8_t RF[], int8_t DCache[], int& opcode,int&rd, const int8_t& ALUO
 
 
 void write_back(int8_t RF[], int& rd, int& opcode, const int8_t& ALUOutput, const int8_t& LMD ){
+    if(rd == 0){return;}
     if(opcode == 11){ // load instruction
         RF[rd] = LMD; // load memory data
     }
@@ -202,10 +204,13 @@ void simulate(std::string directory){
     }*/
     // local variables
     int opcode, rd, rs2, rs1;
-
-    while(!halt && clock < 25){
-        // all instructions except IF run as usual
     
+    for(int j = 0 ; j < 5 ; j++){
+        instruction_metadata[j] = get_metadata(ICache[0]);
+    }
+    while(!halt){
+        // all instructions except IF run as usual
+
         // writeback stage
         if(clock > 3)
         {opcode = instruction_metadata[4].first;
@@ -232,8 +237,7 @@ void simulate(std::string directory){
         instruction_metadata[2] = instruction_metadata[1];}
         
         // decode stage
-        if(clock > 0){opcode = instruction_metadata[1].first;
-        rd = instruction_metadata[1].second;
+        if(clock > 0){
 
         decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
         }
@@ -247,7 +251,6 @@ void simulate(std::string directory){
             instruction_metadata[0] = get_metadata(ICache[PC]); // to ensure correctness
         }
         clock++;
-        std::cout<< IR << std::endl;
     }
 
     // setup outputfiles 
