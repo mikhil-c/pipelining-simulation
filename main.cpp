@@ -1,4 +1,5 @@
 #include<fstream>
+#include<iostream>
 #include<vector>
 #include<string>
 #include<sstream>
@@ -11,7 +12,7 @@ T convert_to_decimal(std::string& data){
     T lower = (data[0] - '0' < 10 && data[0] - '0' >=0) ? data[0]-'0':data[0] - 'a' + 10;
     T upper = (data[1] - '0' < 10 && data[1] - '0' >=0) ? data[1]-'0':data[1] - 'a' + 10;
 
-    return upper*16 + lower;
+    return lower*16 + upper;
 }
 template<typename T> // either int or int8_t
 void get_data(bool instructions, std::ifstream& input_file, T arr []){
@@ -34,8 +35,7 @@ void get_data(bool instructions, std::ifstream& input_file, T arr []){
 void fill_data_cache(std::ofstream& dcache_ouptut, int8_t dcache[] ){
     std::stringstream ss;
     for (int j = 0 ; j < 256 ; j++){
-        ss << std::hex << dcache[j];
-        dcache_ouptut << ss.str() << std::endl; // convert to hexa decimal and output 
+        dcache_ouptut << dcache[j] << std::endl; // convert to hexa decimal and output 
     }
 }
 void fill_output(std::ofstream& output, int output_metrics[]){
@@ -170,17 +170,18 @@ std::pair<int,int>get_metadata(int instruction){
 void simulate(std::string directory){
     int ICache[128];
     int8_t RF[16], DCache[256];
-    int output_metrics[12]; // to be filled manually
-    int PC, IR;
+    int output_metrics[12] = {0}; // to be filled manually
+    int PC = 0, IR;
     int8_t ALUOutput, LMD, A, B;
     int stall_count = 0, clock = 0; // stall_count to see if the processor is stalled, clock to count clock cycle 
-    bool halt;
+    bool halt = false;
     // taking input 
     std::ifstream dcache("./input/"+ directory + "/DCache.txt");
     std::ifstream icache("./input/"+ directory + "/ICache.txt");
-    std::ifstream rfile("./input"+ directory + "/RF.txt");
+    std::ifstream rfile("./input/"+ directory + "/RF.txt");
 
     // fetch data
+
 
     get_data(true, icache, ICache);
     get_data(false, dcache, DCache);
@@ -196,42 +197,46 @@ void simulate(std::string directory){
 
         in every clock cycle transfer the metadata to the next stage for the same instructions
     */
-
+    /*for(int j = 0 ; j < 128; j++){
+        std::cout<<ICache[j]/4096<<std::endl;
+    }*/
     // local variables
     int opcode, rd, rs2, rs1;
-    while(!halt){
+
+    while(!halt && clock < 25){
         // all instructions except IF run as usual
     
         // writeback stage
-        opcode = instruction_metadata[4].first;
+        if(clock > 3)
+        {opcode = instruction_metadata[4].first;
         rd = instruction_metadata[4].second;
 
         write_back(RF, rd, opcode, ALUOutput, LMD);
 
-        instruction_metadata[4] = instruction_metadata[3];
+        instruction_metadata[4] = instruction_metadata[3];}
 
         // memory stage 
-        opcode = instruction_metadata[3].first;
+        if(clock > 2){opcode = instruction_metadata[3].first;
         rd = instruction_metadata[3].second;
 
         memory(RF, DCache, opcode, rd, ALUOutput, LMD);
         
-        instruction_metadata[3] = instruction_metadata[2];
+        instruction_metadata[3] = instruction_metadata[2];}
         
         // execute stage
-        opcode = instruction_metadata[2].first;
+        if(clock > 1){opcode = instruction_metadata[2].first;
         rd = instruction_metadata[2].second;
 
         execute_instruction(RF, A, B, ALUOutput, PC, halt, opcode, rd, rs1, rs2); // rs1, rs2, A, B was updated in the previous iteration ... 
 
-        instruction_metadata[2] = instruction_metadata[1];
+        instruction_metadata[2] = instruction_metadata[1];}
         
         // decode stage
-        opcode = instruction_metadata[1].first;
+        if(clock > 0){opcode = instruction_metadata[1].first;
         rd = instruction_metadata[1].second;
 
         decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
-
+        }
         // IF for this cycle
         instruction_fetch(ICache, PC, IR, stall_count); // IR = ICache[PC], PC ++ 
 
@@ -242,13 +247,13 @@ void simulate(std::string directory){
             instruction_metadata[0] = get_metadata(ICache[PC]); // to ensure correctness
         }
         clock++;
-
+        std::cout<< IR << std::endl;
     }
 
     // setup outputfiles 
 
-    std::ofstream dcache_output("./output" + directory + "/DCache.txt");
-    std::ofstream output("./output" + directory + "/Output.txt");
+    std::ofstream dcache_output("./output/" + directory + "/DCache.txt");
+    std::ofstream output("./output/" + directory + "/Output.txt");
 
     //write data
 
@@ -256,5 +261,6 @@ void simulate(std::string directory){
     fill_output(output, output_metrics);
 }
 int main() {
-
+    std::string directory = "Arith";
+    simulate(directory);
 }
