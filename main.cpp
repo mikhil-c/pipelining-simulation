@@ -20,12 +20,12 @@ void get_data(bool instructions, std::ifstream& input_file, T arr []){
     while(input_file >> data){
         if(instructions)
         {
-            arr[j] = convert_to_decimal(data)*256;
+            arr[j] = convert_to_decimal<int>(data)*256;
             input_file >> data;
-            arr[j] += convert_to_decimal(data);
+            arr[j] += convert_to_decimal<int>(data);
         }
         else{
-            arr[j] = convert_to_decimal(data);
+            arr[j] = convert_to_decimal<int8_t>(data);
         }
         j++;
     }
@@ -69,12 +69,12 @@ void instruction_fetch(int ICache[], int& PC, int&IR){
     PC++;
 }
 
-void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2) {
+void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& stall_count, std::vector<std::pair<int,int>>& instruction_metadata) {
     // extracting rs2
     rs2 = instruction % 16;
     instruction >>= 4;
 
-    // extracting rs1
+    // extracting rs1   
     rs1 = instruction % 16;
     instruction >>= 4;
     
@@ -85,9 +85,24 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
     // extracting opcode
     opcode = instruction;
 
+    // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
+    bool RAW = false;
+    int rd;
+    for(int j = 2 ; j < 5 ; j++){ // the earlier the better 
+        rd = instruction_metadata[j].second;
+        if(rd == rs1 || rd == rs2){
+            RAW  = true;
+            stall_count = 5 - j;
+            break; 
+        }
+    }
     // stores the output in the temporary registers
-    A = RF[rs1];
-    B = RF[rs2];
+    if(!RAW){
+        A = RF[rs1];
+        B = RF[rs2];
+        instruction_metadata[1] = instruction_metadata[0]; // pull the IF stage instruction into decode, else let it stay 
+    }
+    
 }
 int8_t get_imm_4(int& num) {
     return num < 8 ? num : 16 - num; 
@@ -140,14 +155,18 @@ void write_back(int8_t RF[], int& rd, int& opcode, const int8_t& ALUOutput, cons
         RF[rd] = ALUOutput;
     }
 }
-
+std::pair<int,int>get_metadata(int instruction){
+    instruction = instruction/256; // to get opcode and rd
+    return {(instruction/16) % 16, instruction % 16};
+}
 //main simulation function
 void simulate(std::string directory){
     int ICache[128];
     int8_t RF[16], DCache[256];
     int output_metrics[12]; // to be filled manually
     int PC, IR;
-    int stall_count, clock; // stall_count to see if the processor is stalled, clock to count clock cycle 
+    int8_t ALUOutput, LMD, A, B;
+    int stall_count = 0, clock = 0; // stall_count to see if the processor is stalled, clock to count clock cycle 
     bool halt;
     // taking input 
     std::ifstream dcache("./input/"+ directory + "/DCache.txt");
@@ -161,7 +180,7 @@ void simulate(std::string directory){
     get_data(false, rfile, RF);
     
     std::vector<std::pair<int,int>> instruction_metadata(5); // to store the metadata of instruction in 
-    /*
+    /* (opcode, rd)
         0: IF Stage
         1: ID stage 
         2: EXE stage
@@ -171,7 +190,51 @@ void simulate(std::string directory){
         in every clock cycle transfer the metadata to the next stage for the same instructions
     */
 
+    // local variables
+    int opcode, rd, rs2, rs1;
     while(!halt){
+        // all instructions except IF run as usual
+    
+        // writeback stage
+        opcode = instruction_metadata[4].first;
+        rd = instruction_metadata[4].second;
+
+        write_back(RF, rd, opcode, ALUOutput, LMD);
+
+        instruction_metadata[4] = instruction_metadata[3];
+
+        // memory stage 
+        opcode = instruction_metadata[3].first;
+        rd = instruction_metadata[3].second;
+
+        memory(RF, DCache, opcode, rd, ALUOutput, LMD);
+        
+        instruction_metadata[3] = instruction_metadata[2];
+        
+        // execute stage
+        opcode = instruction_metadata[2].first;
+        rd = instruction_metadata[2].second;
+
+        execute_instruction(RF, A, B, ALUOutput, PC, halt, opcode, rd, rs1, rs2); // rs1, rs2, A, B was updated in the previous iteration ... 
+
+        instruction_metadata[2] = instruction_metadata[1];
+        
+        // decode stage
+        opcode = instruction_metadata[1].first;
+        rd = instruction_metadata[1].second;
+
+        decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
+
+        // IF for this cycle
+        instruction_fetch(ICache, PC, IR); // IR = ICache[PC], PC ++ 
+
+        if(stall_count > 0){
+            stall_count--;
+        }
+        else{
+            instruction_metadata[0] = get_metadata(ICache[PC]); // to ensure correctness
+        }
+        clock++;
 
     }
 
@@ -184,12 +247,6 @@ void simulate(std::string directory){
 
     fill_data_cache(dcache_output, DCache);
     fill_output(output, output_metrics);
-
-    // 5 element queue to store output registers of perv 
-
-    // 5 element array 
-
-    // stall, control_hazard, raw_hazard
 }
 int main() {
 
