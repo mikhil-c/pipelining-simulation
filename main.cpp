@@ -91,12 +91,12 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
     // extracting opcode
     opcode = instruction;
 
+    int _rd;
     // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
     bool RAW = false;
-    int rd;
     for(int j = 2 ; j < 5 ; j++){ // the earlier the better 
-        rd = instruction_metadata[j].second;
-        if(rd == rs1 || rd == rs2){
+        _rd = instruction_metadata[j].second;
+        if(_rd == rs1 || _rd == rs2){
             RAW  = true;
             stall_count = 5 - j;
             break; 
@@ -233,7 +233,7 @@ void simulate(std::string directory){
         decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
 
         // IF for this cycle
-        instruction_fetch(ICache, PC, IR); // IR = ICache[PC], PC ++ 
+        instruction_fetch(ICache, PC, IR, stall_count); // IR = ICache[PC], PC ++ 
 
         if(stall_count > 0){
             stall_count--;
