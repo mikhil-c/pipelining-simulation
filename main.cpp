@@ -20,12 +20,12 @@ void get_data(bool instructions, std::ifstream& input_file, T arr []){
     while(input_file >> data){
         if(instructions)
         {
-            arr[j] = convert_to_decimal(data)*256;
+            arr[j] = convert_to_decimal<int>(data)*256;
             input_file >> data;
-            arr[j] += convert_to_decimal(data);
+            arr[j] += convert_to_decimal<int>(data);
         }
         else{
-            arr[j] = convert_to_decimal(data);
+            arr[j] = convert_to_decimal<int8_t>(data);
         }
         j++;
     }
