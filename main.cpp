@@ -303,13 +303,11 @@ void simulate(std::string directory) {
 }
 
 int main() {
-
-    simulate("Arith");
-    /*std::string path = "./input";
+    std::string path = "./input";
     for (auto& entry : std::filesystem::directory_iterator(path)) {
         if (entry.is_directory()) {
             std::string directory = entry.path().filename().string();
             simulate(directory);
         }
-    }*/
+    }
 }
