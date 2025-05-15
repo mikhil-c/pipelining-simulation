@@ -2,6 +2,7 @@
 #include <string>
 #include <sstream>
 #include <cstdint>
+#include <filesystem>
 
 // file handling functions
 template <typename T>
@@ -291,6 +292,11 @@ void simulate(std::string directory) {
 }
 
 int main() {
-    std::string directory = "Arith";
-    simulate(directory);
+    std::string path = "./input";
+    for (auto& entry : std::filesystem::directory_iterator(path)) {
+        if (entry.is_directory()) {
+            std::string directory = entry.path().filename().string();
+            simulate(directory);
+        }
+    }
 }
