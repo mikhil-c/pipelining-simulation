@@ -1,30 +1,28 @@
 #include <fstream>
-#include <vector>
 #include <string>
 #include <sstream>
 #include <cstdint>
-#include <queue>
 
 // file handling functions
-template<typename T>
+template <typename T>
 T convert_to_decimal(std::string& data) {
     // length is 2
     T lower = (data[0] - '0' < 10 && data[0] - '0' >= 0) ? data[0] - '0' : data[0] - 'a' + 10;
     T upper = (data[1] - '0' < 10 && data[1] - '0' >= 0) ? data[1] - '0' : data[1] - 'a' + 10;
-    return lower * 16 + upper;
+    return (lower << 4) + upper;
 }
 
-template<typename T> // either int or int8_t
-void get_data(bool instructions, std::ifstream& input_file, T arr[]) {
+template <typename T> // either int or int8_t
+void get_data(int type, std::ifstream& input_file, T arr[]) {
     int j = 0;
     std::string data;
     while (input_file >> data) {
-        if (instructions) {
-            arr[j] = convert_to_decimal<int>(data) * 256;
+        if (type == 1) {
+            arr[j] = convert_to_decimal<int>(data) << 8;
             input_file >> data;
             arr[j] += convert_to_decimal<int>(data);
         }
-        else {
+        else if (type == 0) {
             arr[j] = convert_to_decimal<int8_t>(data);
         }
         j++;
@@ -34,12 +32,12 @@ void get_data(bool instructions, std::ifstream& input_file, T arr[]) {
 void fill_data_cache(std::ofstream& dcache_ouptut, int8_t dcache[]) {
     std::stringstream ss;
     for (int j = 0; j < 256; j++) {
-        dcache_ouptut << dcache[j] << "\n"; // convert to hexa decimal and output 
+        dcache_ouptut << dcache[j] << "\n"; // convert to hexadecimal and output 
     }
 }
 
 void fill_output(std::ofstream& output, int output_metrics[]) {
-    std::vector<std::string> text = {
+    std::string text[] = {
         "Total number of instructions executed        : ",
         "Number of instructions in each class",     
         "Arithmetic instructions                      : ",
@@ -56,7 +54,7 @@ void fill_output(std::ofstream& output, int output_metrics[]) {
     };
     output << text[0] << output_metrics[0] << "\n" << text[1] << "\n";
     int j = 1;
-    for (; j < text.size() - 1; j++) {
+    for (; j < 13 - 1; j++) { // 13 is the size of the text array
         output << text[j + 1] << output_metrics[j] << "\n"; // to maintain offset 
     }
 }
@@ -73,7 +71,7 @@ void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count) {
     }
 }
 
-void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& stall_count, std::vector<std::pair<int, int>>& instruction_metadata) {
+void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& stall_count, std::pair<int, int> instruction_metadata[]) {
     // extracting rs2
     rs2 = instruction % 16;
     instruction >>= 4;
@@ -170,17 +168,17 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, in
 
 void memory(int8_t RF[], int8_t DCache[], int& opcode, int& rd, int8_t& ALUOutput, int8_t& LMD) {
     // ALUOutput is the address
-    if (opcode == 11) { // load instruction
+    if (opcode == 11) {      // load instruction
         LMD = DCache[ALUOutput];
     }
-    else if (opcode == 12) {
+    else if (opcode == 12) { // store instruction
         DCache[ALUOutput] = RF[rd];
     }
 }
 
 void write_back(int8_t RF[], int& rd, int& opcode, int8_t& ALUOutput, int8_t& LMD) {
-    if (opcode == 11) { // load instruction
-        RF[rd] = LMD;   // load memory data
+    if (opcode == 11) {     // load instruction
+        RF[rd] = LMD;       // load memory data
     }
     else if (opcode < 11) {
         RF[rd] = ALUOutput;
@@ -188,31 +186,35 @@ void write_back(int8_t RF[], int& rd, int& opcode, int8_t& ALUOutput, int8_t& LM
 }
 
 std::pair<int, int> get_metadata(int instruction) {
-    instruction = instruction / 256; // to get opcode and rd
-    return {(instruction / 16) % 16, instruction % 16};
+    instruction >>= 8; // to get opcode and rd
+    return {instruction >> 4, instruction % 16};
 }
 
 // main simulation function
 void simulate(std::string directory) {
     int ICache[128];
-    int8_t RF[16], DCache[256];
+    int8_t DCache[256], RF[16];
     int output_metrics[12] = {0};   // to be filled manually
     int PC = 0, IR;
-    int8_t ALUOutput, LMD, A, B;
+    int8_t A, B, ALUOutput, LMD;
     int stall_count = 0, clock = 0; // stall_count to see if the processor is stalled, clock to count clock cycle 
     bool halt = false;
     
     // taking input 
-    std::ifstream dcache("./input/" + directory + "/DCache.txt");
     std::ifstream icache("./input/" + directory + "/ICache.txt");
+    std::ifstream dcache("./input/" + directory + "/DCache.txt");
     std::ifstream rfile("./input/" + directory + "/RF.txt");
 
     // fetch data
-    get_data(true, icache, ICache);
-    get_data(false, dcache, DCache);
-    get_data(false, rfile, RF);
-    
-    std::vector<std::pair<int, int>> instruction_metadata(5); // to store the metadata of instruction 
+    get_data(1, icache, ICache);
+    get_data(0, dcache, DCache);
+    get_data(0, rfile, RF);
+    /*
+     * type = 1 for instr cache
+     * type = 0 for data cache and reg file
+     */
+
+    std::pair<int, int> instruction_metadata[5]; // to store the metadata of instruction 
     /* 
      * (opcode, rd)
      * 0: IF Stage
@@ -224,7 +226,7 @@ void simulate(std::string directory) {
      */
 
     // local variables
-    int opcode, rd, rs2, rs1;
+    int opcode, rd, rs1, rs2;
 
     while (!halt && clock < 25) {
         // all instructions except IF run as usual
