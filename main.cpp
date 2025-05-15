@@ -2,18 +2,25 @@
 #include<vector>
 #include<string>
 #include<sstream>
-int convert_to_decimal(std::string& data){
+#include<cstdint>
+#include<queue>
+
+// file handling functions 
+template<typename T>
+T convert_to_decimal(std::string& data){
     // length is 2
-    int lower = (data[0] - '0' < 10 && data[0] - '0' >=0) ? data[0]-'0':data[0] - 'a' + 10;
-    int upper = (data[1] - '0' < 10 && data[1] - '0' >=0) ? data[1]-'0':data[1] - 'a' + 10;
+    T lower = (data[0] - '0' < 10 && data[0] - '0' >=0) ? data[0]-'0':data[0] - 'a' + 10;
+    T upper = (data[1] - '0' < 10 && data[1] - '0' >=0) ? data[1]-'0':data[1] - 'a' + 10;
 
     return upper*16 + lower;
 }
-void get_data(const bool instructions, std::ifstream& input_file, int arr []){
+template<typename T> // either int or int8_t
+void get_data(bool instructions, std::ifstream& input_file, T arr []){
     int j = 0;
     std::string data;
     while(input_file >> data){
-        if(instructions){
+        if(instructions)
+        {
             arr[j] = convert_to_decimal(data)*256;
             input_file >> data;
             arr[j] += convert_to_decimal(data);
@@ -24,7 +31,8 @@ void get_data(const bool instructions, std::ifstream& input_file, int arr []){
         j++;
     }
 }
-void fill_data_cache(std::ofstream& dcache_ouptut, int dcache[] ){
+
+void fill_data_cache(std::ofstream& dcache_ouptut, int8_t dcache[] ){
     std::stringstream ss;
     for (int j = 0 ; j < 256 ; j++){
         ss << std::hex << dcache[j];
@@ -54,24 +62,44 @@ void fill_output(std::ofstream& output, int output_metrics[]){
         output << text[j+1] << output_metrics[j] << std::endl; // to maintain offset 
     }
 }
-// convert to numeral & fill data
-// decoding -- given a number decode the kind of instruction 
-// convert back to hexadecimal
+
+//stages 
+
+void instruction_fetch(int ICache[], int& PC, int&IR){
+    IR =  ICache[PC]; // not doing +2 
+    PC++;
+}
+void write_back(int8_t RF[], int& rd, int& opcode, const int8_t& ALUOutput, const int8_t& LMD ){
+    if(opcode == 11){ // load instruction
+        RF[rd] = LMD; // load memory data
+    }
+    else if(opcode < 11){
+        RF[rd] = ALUOutput;
+    }
+}
+void memory(int8_t RF[], int8_t DCache[], int& opcode,int&rd, const int8_t& ALUOutput, int8_t&LMD){
+    //ALUOutput is the address 
+    if(opcode == 11){ // load instruction
+        LMD = DCache[ALUOutput];
+    }
+    else if( opcode == 12){
+        DCache[ALUOutput] = RF[rd];
+    }
+}
+
+//main simulatoin function
 void simulate(std::string directory){
-    int ICache[256], DCache[256];
-    int RF[16];
-    int output[13];
+    int ICache[128];
+    int8_t RF[16], DCache[256];
+    int output_metrics[13];
+    int PC, IR;
     // taking input 
     std::ifstream dcache("./input/"+ directory + "/DCache.txt");
     std::ifstream icache("./input/"+ directory + "/ICache.txt");
     std::ifstream rfile("./input"+ directory + "RF.txt");
 
     // simulation 
-
-
-
-
-
+    
 
 
     std::ofstream dcache_output("./output" + directory + "DCache.txt");
@@ -81,11 +109,6 @@ void simulate(std::string directory){
     // 5 element array 
 
     // stall, control_hazard, raw_hazard
-
-
-
-
-
 }
 int main(){
 
