@@ -62,11 +62,17 @@ void fill_output(std::ofstream& output, int output_metrics[]){
     }
 }
 
-//stages 
+// stages 
 
-void instruction_fetch(int ICache[], int& PC, int&IR){
-    IR =  ICache[PC]; // not doing +2 
-    PC++;
+void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count) {
+    if (stall_count <= 0) {
+        IR =  ICache[PC]; 
+        PC++; // not doing +2
+        int _opcode = IR >> 12;
+        if (_opcode == 13 || _opcode == 14) {
+            stall_count += 2;
+        }
+    }
 }
 
 void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2) {
@@ -94,6 +100,7 @@ int8_t get_imm_4(int& num) {
 }
 
 void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, bool& halt, int& opcode, int& rd, int& rs1, int&rs2) {
+    int8_t imm = 0;
     switch (opcode) {
         case 0: ALUOuput = A + B; break;               // ADD
         case 1: ALUOuput = A - B; break;               // SUB
@@ -105,15 +112,15 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, in
         case 7: ALUOuput = ~A; break;                  // NOT
         case 8: ALUOuput = A << get_imm_4(rs2); break; // SLLI
         case 9: ALUOuput = A >> get_imm_4(rs2); break; // SRLI
-        case 10: int8_t imm = (rs1 << 4) + rs2;        // LI
+        case 10: imm = (rs1 << 4) + rs2;               // LI
                  ALUOuput = imm;
                  break;                                
         case 11:                                  
         case 12: ALUOuput = A + get_imm_4(rs2); break; // LD & ST
-        case 13: int8_t imm = (rd << 4) + rs1;         // JMP
+        case 13: imm = (rd << 4) + rs1;                // JMP
                  PC += imm;
                  break;
-        case 14: int8_t imm = (rs1 << 4) + rs2;        // BEQZ
+        case 14: imm = (rs1 << 4) + rs2;               // BEQZ
                  if (RF[rd] == 0) {
                      PC += imm;
                  }
