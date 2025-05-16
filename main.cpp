@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
+#include <iomanip>
 
 // file handling functions
 template <typename T>
@@ -50,7 +51,7 @@ void fill_data_cache(std::ofstream& dcache_ouptut, int8_t dcache[]) {
     }
 }
 
-void fill_output(std::ofstream& output, int output_metrics[]) {
+void fill_output(std::ofstream& output, int output_metrics[], int& clock) {
     std::string text[] = {
         "Total number of instructions executed        : ",
         "Number of instructions in each class",     
@@ -69,7 +70,12 @@ void fill_output(std::ofstream& output, int output_metrics[]) {
     output << text[0] << output_metrics[0] << "\n" << text[1] << "\n";
     int j = 1;
     for (; j < 13 - 1; j++) { // 13 is the size of the text array
-        output << text[j + 1] << output_metrics[j] << "\n"; // to maintain offset 
+        if (j == 8) { // outputs CPI 
+            output << text[j + 1] << std::fixed << std::setprecision(5) << (long double)clock / output_metrics[0] << "\n";
+        }
+        else {
+            output << text[j + 1] << output_metrics[j] << "\n"; // to maintain offset
+        }
     }
 }
 
@@ -158,50 +164,63 @@ int8_t get_imm_4(int& num) {
     return num < 8 ? num : 16 - num; 
 }
 
-void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, int& opcode, int& rd, int& rs1, int&rs2) {
+void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, int& opcode, int& rd, int& rs1, int&rs2, int output_metrics[]) {
     int8_t imm = 0;
     switch (opcode) {
         case 0:                           // ADD
             ALUOuput = A + B;
+            output_metrics[1]++;
             break;
         case 1:                           // SUB
             ALUOuput = A - B;
+            output_metrics[1]++;
             break;
         case 2:                           // MUL
             ALUOuput = A * B;
+            output_metrics[1]++;
             break;
         case 3:                           // INC
             ALUOuput = RF[rd] + 1;
+            output_metrics[1]++;
             break;
         case 4:                           // AND
             ALUOuput = A & B;
+            output_metrics[2]++;
             break;
         case 5:                           // OR
             ALUOuput = A | B;
+            output_metrics[2]++;
             break;
         case 6:                           // XOR
             ALUOuput = A ^ B;
+            output_metrics[2]++;
             break;
         case 7:                           // NOT
             ALUOuput = ~A;
+            output_metrics[2]++;
             break;
         case 8:                           // SLLI
             ALUOuput = A << get_imm_4(rs2);
+            output_metrics[3]++;
             break;
         case 9:                           // SRLI
             ALUOuput = (uint8_t)A >> get_imm_4(rs2);
+            output_metrics[3]++;
             break;
         case 10:                          // LI
             imm = (rs1 << 4) + rs2;
             ALUOuput = imm;
+            output_metrics[5]++;
             break;
         case 11:
         case 12:                          // LD & ST
             ALUOuput = A + get_imm_4(rs2);
+            output_metrics[4]++;
             break;
         case 13:                          // JMP
             imm = (rd << 4) + rs1;
             PC += imm;
+            output_metrics[6]++;
             break;
         case 14:                          // BEQZ
             imm = (rs1 << 4) + rs2;
@@ -211,10 +230,13 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, in
             else {
                 PC++;
             }
+            output_metrics[6]++;
             break;
         case 15:                          // HLT
+            output_metrics[7]++;
             break;
     }
+    output_metrics[0]++;
 }
 
 void memory(int8_t RF[], int8_t DCache[], int& opcode, int& rd, int8_t& ALUOutput, int8_t& LMD) {
@@ -234,6 +256,7 @@ void write_back(int8_t RF[], int& rd, int& opcode, int8_t& ALUOutput, int8_t& LM
     else if (opcode < 11) {
         RF[rd] = ALUOutput;
     }
+    RF[0] = 0;
 }
 
 std::tuple<int, int, int8_t> get_metadata(int instruction) {
@@ -291,6 +314,7 @@ void simulate(std::string directory) {
     }
     instruction_metadata[0] = get_metadata(ICache[PC]);
 
+    RF[0] = 0; // R0 is hardwired to zero
     // local variables
     int opcode, rd, rs1, rs2; 
     while (!is_pipeline_empty(instruction_metadata)) {
@@ -315,7 +339,7 @@ void simulate(std::string directory) {
         if (RAW_stall_count == 0) {
             // execute stage
             if (instruction_metadata[2] != std::make_tuple(-1, -1, -1)) {
-                execute_instruction(RF, A, B, ALUOutput, PC, opcode, rd, rs1, rs2); // rs1, rs2, A, B was updated in the previous iteration ... 
+                execute_instruction(RF, A, B, ALUOutput, PC, opcode, rd, rs1, rs2, output_metrics); // rs1, rs2, A, B was updated in the previous iteration ... 
                 instruction_metadata[3] = instruction_metadata[2];
                 std::get<2>(instruction_metadata[3]) = ALUOutput;
                 instruction_metadata[2] = std::make_tuple(-1, -1, -1);
@@ -337,14 +361,18 @@ void simulate(std::string directory) {
                 }
                 else {
                     control_stall_count--;
+                    output_metrics[11]++;
+                    output_metrics[9]++;
                 }
                 instruction_metadata[0] = std::make_tuple(-1, -1, -1);
             }
         }
         else {
-            RAW_stall_count--;
             A = RF[rs1];
             B = RF[rs2];
+            RAW_stall_count--;
+            output_metrics[10]++;
+            output_metrics[9]++;
         }
         clock++;
     }
@@ -355,7 +383,7 @@ void simulate(std::string directory) {
 
     // write data
     fill_data_cache(dcache_output, DCache);
-    fill_output(output, output_metrics);
+    fill_output(output, output_metrics, clock);
 }
 
 int main() {
