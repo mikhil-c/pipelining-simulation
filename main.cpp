@@ -1,5 +1,4 @@
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <cstdint>
 #include <tuple>
@@ -75,7 +74,7 @@ void fill_output(std::ofstream& output, int output_metrics[]) {
 }
 
 // stages
-void instruction_fetch(int ICache[], int& PC, int& IR, int& control_stall_count, int& PC_branch, bool& halt) {
+void instruction_fetch(int ICache[], int& PC, int& IR, int& control_stall_count, bool& halt) {
     // difference between the addresses of consecutive instructions is 1 instead of 2
     IR = ICache[PC]; 
     int _opcode = IR >> 12;
@@ -84,7 +83,7 @@ void instruction_fetch(int ICache[], int& PC, int& IR, int& control_stall_count,
         PC++;
     }
     else if (_opcode == 13 || _opcode == 14) {
-        control_stall_count += 2;
+        control_stall_count = 2;
     }
     else {
         PC++;
@@ -152,7 +151,6 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
     if (!RAW) {
         A = RF[rs1];
         B = RF[rs2];
-        //instruction_metadata[1] = instruction_metadata[0]; // pull the IF stage instruction into decode, else let it stay 
     }    
 }
 
@@ -160,7 +158,7 @@ int8_t get_imm_4(int& num) {
     return num < 8 ? num : 16 - num; 
 }
 
-void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, bool& halt, int& opcode, int& rd, int& rs1, int&rs2, int& PC_branch) {
+void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, int& opcode, int& rd, int& rs1, int&rs2) {
     int8_t imm = 0;
     switch (opcode) {
         case 0:                           // ADD
@@ -256,12 +254,13 @@ bool is_pipeline_empty(std::tuple<int, int, int8_t> instruction_metadata[]) {
 void simulate(std::string directory) {
     int ICache[128];
     int8_t DCache[256], RF[16];
-    int output_metrics[12] = {0};   // to be filled manually
-    int PC = 0, IR, PC_branch = 0;
+    int PC = 0, IR;
     int8_t A, B, ALUOutput, LMD;
-    int control_stall_count = 0, RAW_stall_count = 0;
-    int stall_count = 0, clock = 0; // stall_count to see if the processor is stalled, clock to count clock cycle 
+    int control_stall_count = 0, RAW_stall_count = 0; // stall count to see if the processor is stalled
+    int clock = 0;                                    // clock to count clock cycle 
     bool halt = false;
+
+    int output_metrics[12] = {0};   // to be filled manually
     
     // taking input 
     std::ifstream icache("./input/" + directory + "/ICache.txt");
@@ -291,11 +290,10 @@ void simulate(std::string directory) {
         instruction_metadata[i] = std::make_tuple(-1, -1, -1);
     }
     instruction_metadata[0] = get_metadata(ICache[PC]);
+
     // local variables
     int opcode, rd, rs1, rs2; 
     while (!is_pipeline_empty(instruction_metadata)) {
-        // all instructions except IF run as usual
-
         // writeback stage
         if (instruction_metadata[4] != std::make_tuple(-1, -1, -1)) {
             int _opcode = std::get<0>(instruction_metadata[4]);
@@ -313,62 +311,45 @@ void simulate(std::string directory) {
             instruction_metadata[4] = instruction_metadata[3];
             instruction_metadata[3] = std::make_tuple(-1, -1, -1);
         }
+
         if (RAW_stall_count == 0) {
-        // execute stage
-        if (instruction_metadata[2] != std::make_tuple(-1, -1, -1)) {
-/*            opcode = instruction_metadata[2].first;
-            rd = instruction_metadata[2].second; */
-            execute_instruction(RF, A, B, ALUOutput, PC, halt, opcode, rd, rs1, rs2, PC_branch); // rs1, rs2, A, B was updated in the previous iteration ... 
-            instruction_metadata[3] = instruction_metadata[2];
-            std::get<2>(instruction_metadata[3]) = ALUOutput;
-            instruction_metadata[2] = std::make_tuple(-1, -1, -1);
-        }
-/*        else if (clock <= 1) {
-            PC_branch++;
-        } */
-
-        // decode stage
-        if (instruction_metadata[1] != std::make_tuple(-1, -1, -1)) {
-/*            opcode = instruction_metadata[1].first;
-            rd = instruction_metadata[1].second;*/
-            decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, RAW_stall_count, instruction_metadata);
-            instruction_metadata[2] = instruction_metadata[1];
-            instruction_metadata[1] = std::make_tuple(-1, -1, -1);
-/*            if (stall_count) {
-                instruction_fetch(ICache, PC, IR, stall_count, PC_branch);
-            }*/
-        }
-
-        // IF for this cycle
-        if (!halt) {
-            if (control_stall_count == 0) {
-                instruction_metadata[0] = get_metadata(ICache[PC]);
-                instruction_fetch(ICache, PC, IR, control_stall_count, PC_branch, halt); // IR = ICache[PC], PC++ 
-                instruction_metadata[1] = instruction_metadata[0];
+            // execute stage
+            if (instruction_metadata[2] != std::make_tuple(-1, -1, -1)) {
+                execute_instruction(RF, A, B, ALUOutput, PC, opcode, rd, rs1, rs2); // rs1, rs2, A, B was updated in the previous iteration ... 
+                instruction_metadata[3] = instruction_metadata[2];
+                std::get<2>(instruction_metadata[3]) = ALUOutput;
+                instruction_metadata[2] = std::make_tuple(-1, -1, -1);
             }
-            else {
-                control_stall_count--;
+
+            // decode stage
+            if (instruction_metadata[1] != std::make_tuple(-1, -1, -1)) {
+                decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, RAW_stall_count, instruction_metadata);
+                instruction_metadata[2] = instruction_metadata[1];
+                instruction_metadata[1] = std::make_tuple(-1, -1, -1);
             }
-            instruction_metadata[0] = std::make_tuple(-1, -1, -1);
-        }
+
+            // fetch stage
+            if (!halt) {
+                if (control_stall_count == 0) {
+                    instruction_metadata[0] = get_metadata(ICache[PC]);
+                    instruction_fetch(ICache, PC, IR, control_stall_count, halt); 
+                    instruction_metadata[1] = instruction_metadata[0];
+                }
+                else {
+                    control_stall_count--;
+                }
+                instruction_metadata[0] = std::make_tuple(-1, -1, -1);
+            }
         }
         else {
             RAW_stall_count--;
             A = RF[rs1];
             B = RF[rs2];
         }
-/*
-        if (stall_count > 0) {
-            stall_count--;
-        }
-        else {
-            instruction_metadata[0] = get_metadata(ICache[PC]); // to ensure correctness
-        }*/
         clock++;
-        std::cout << clock << " " << IR << " " << ICache[PC - 1] << " " << PC << std::endl; // debug
     }
 
-    // setup outputfiles 
+    // setup output files 
     std::ofstream dcache_output("./output/" + directory + "/DCache.txt");
     std::ofstream output("./output/" + directory + "/Output.txt");
 
@@ -378,12 +359,14 @@ void simulate(std::string directory) {
 }
 
 int main() {
-/*    std::string path = "./input";
+    std::string path = "./input";
     for (auto& entry : std::filesystem::directory_iterator(path)) {
         if (entry.is_directory()) {
             std::string directory = entry.path().filename().string();
+            if (directory == "MaxShift" || directory == "Sample1" || directory == "Sample2" || directory == "Sample3") {
+                continue;
+            }
             simulate(directory);
         }
-    } */
-    simulate("SimpleLoadAdd");
+    }
 }
