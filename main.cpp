@@ -4,11 +4,14 @@
 #include <sstream>
 #include <cstdint>
 #include <filesystem>
-
+#include <algorithm>
+#include <cctype>
 // file handling functions
 template <typename T>
 T convert_to_decimal(std::string& data) {
     // length is 2
+    std::transform(data.begin(), data.end(), data.begin(),
+    [](unsigned char c){ return std::tolower(c); });
     T lower = (data[0] - '0' < 10 && data[0] - '0' >= 0) ? data[0] - '0' : data[0] - 'a' + 10;
     T upper = (data[1] - '0' < 10 && data[1] - '0' >= 0) ? data[1] - '0' : data[1] - 'a' + 10;
     return (lower << 4) + upper;
@@ -20,7 +23,7 @@ void get_data(int type, std::ifstream& input_file, T arr[]) {
     std::string data;
     while (input_file >> data) {
         if (type == 1) { // data is stored in big-endian format
-            arr[j] = convert_to_decimal<int>(data) << 8;
+            arr[j] = (convert_to_decimal<int>(data) << 8);
             input_file >> data;
             arr[j] += convert_to_decimal<int>(data);
         }
@@ -62,15 +65,14 @@ void fill_output(std::ofstream& output, int output_metrics[]) {
 }
 
 // stages
-void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count) {
-    if (stall_count <= 0) {
+void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count, const int& PC_branch) {
+
         IR =  ICache[PC]; 
-        PC++; // not doing +2
+        PC = PC_branch; // not doing +2
         int _opcode = IR >> 12;
         if (_opcode == 13 || _opcode == 14) {
             stall_count += 2;
         }
-    }
 }
 
 void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& stall_count, std::pair<int, int> instruction_metadata[]) {
@@ -131,7 +133,8 @@ int8_t get_imm_4(int& num) {
     return num < 8 ? num : 16 - num; 
 }
 
-void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, bool& halt, int& opcode, int& rd, int& rs1, int&rs2) {
+void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, const int& PC, bool& halt, int& opcode, int& rd, int& rs1, int&rs2, int& PC_branch) {
+    PC_branch = PC + 1;
     int8_t imm = 0;
     switch (opcode) {
         case 0:                           // ADD
@@ -174,12 +177,12 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, in
             break;
         case 13:                          // JMP
             imm = (rd << 4) + rs1;
-            PC += imm;
+            PC_branch = PC + imm;
             break;
         case 14:                          // BEQZ
             imm = (rs1 << 4) + rs2;
             if (RF[rd] == 0) {
-                PC += imm;
+                PC_branch = PC + imm;
             }
             break;
         case 15:                          // HLT
@@ -216,7 +219,7 @@ void simulate(std::string directory) {
     int ICache[128];
     int8_t DCache[256], RF[16];
     int output_metrics[12] = {0};   // to be filled manually
-    int PC = 0, IR;
+    int PC = 0, IR, PC_branch = 0;
     int8_t A, B, ALUOutput, LMD;
     int stall_count = 0, clock = 0; // stall_count to see if the processor is stalled, clock to count clock cycle 
     bool halt = false;
@@ -252,12 +255,13 @@ void simulate(std::string directory) {
     for(int j = 0; j < 5; j++){
         instruction_metadata[j] = get_metadata(ICache[0]);
     }
+    
 
     while (!halt) {
         // all instructions except IF run as usual
 
         // writeback stage
-        if (clock > 3) {
+        if (clock > 3 && stall_count < 3) {
             opcode = instruction_metadata[4].first;
             rd = instruction_metadata[4].second;
 
@@ -267,7 +271,7 @@ void simulate(std::string directory) {
         }
 
         // memory stage
-        if (clock > 2) {
+        if (clock > 2 && stall_count < 2) {
             opcode = instruction_metadata[3].first;
             rd = instruction_metadata[3].second;
 
@@ -277,25 +281,31 @@ void simulate(std::string directory) {
         }
 
         // execute stage
-        if (clock > 1) {
+        if (clock > 1 && stall_count < 1) {
             opcode = instruction_metadata[2].first;
             rd = instruction_metadata[2].second;
 
-            execute_instruction(RF, A, B, ALUOutput, PC, halt, opcode, rd, rs1, rs2); // rs1, rs2, A, B was updated in the previous iteration ... 
+            execute_instruction(RF, A, B, ALUOutput, PC, halt, opcode, rd, rs1, rs2, PC_branch); // rs1, rs2, A, B was updated in the previous iteration ... 
 
             instruction_metadata[2] = instruction_metadata[1];
         }
+        else if (clock <= 1){
+            PC_branch++;
+        }
 
         // decode stage
-        if (clock > 0) {
+        if (clock > 0 && stall_count == 0) {
             opcode = instruction_metadata[1].first;
             rd = instruction_metadata[1].second;
 
             decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
+            if(stall_count){
+                instruction_fetch(ICache, PC, IR, stall_count, PC_branch);
+            }
         }
 
         // IF for this cycle
-        instruction_fetch(ICache, PC, IR, stall_count); // IR = ICache[PC], PC++ 
+        if(stall_count == 0) instruction_fetch(ICache, PC, IR, stall_count, PC_branch); // IR = ICache[PC], PC++ 
 
         if (stall_count > 0) {
             stall_count--;
