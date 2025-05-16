@@ -1,20 +1,21 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <sstream>
 #include <cstdint>
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
+
 // file handling functions
 template <typename T>
 T convert_to_decimal(std::string& data) {
     // length is 2
-    std::transform(data.begin(), data.end(), data.begin(),
-    [](unsigned char c){ return std::tolower(c); });
-    T lower = (data[0] - '0' < 10 && data[0] - '0' >= 0) ? data[0] - '0' : data[0] - 'a' + 10;
-    T upper = (data[1] - '0' < 10 && data[1] - '0' >= 0) ? data[1] - '0' : data[1] - 'a' + 10;
-    return (lower << 4) + upper;
+    std::transform(data.begin(), data.end(), data.begin(), [] (unsigned char c) {
+        return std::tolower(c);
+    });
+    T upper = (data[0] - '0' < 10 && data[0] - '0' >= 0) ? data[0] - '0' : data[0] - 'a' + 10;
+    T lower = (data[1] - '0' < 10 && data[1] - '0' >= 0) ? data[1] - '0' : data[1] - 'a' + 10;
+    return (upper << 4) + lower;
 }
 
 template <typename T> // either int or int8_t
@@ -34,10 +35,18 @@ void get_data(int type, std::ifstream& input_file, T arr[]) {
     }
 }
 
+std::string convert_to_hex(int8_t num) {
+    std::string result;
+    int upper = (uint8_t)num >> 4;
+    int lower = (uint8_t)num % 16;
+    result += (upper < 10) ? '0' + upper : 'a' + (upper - 10);
+    result += (lower < 10) ? '0' + lower : 'a' + (lower - 10);
+    return result;
+}
+
 void fill_data_cache(std::ofstream& dcache_ouptut, int8_t dcache[]) {
-    std::stringstream ss;
     for (int j = 0; j < 256; j++) {
-        dcache_ouptut << dcache[j] << "\n"; // convert to hexadecimal and output 
+        dcache_ouptut << convert_to_hex(dcache[j]) << "\n"; // convert to hexadecimal and output 
     }
 }
 
@@ -65,14 +74,13 @@ void fill_output(std::ofstream& output, int output_metrics[]) {
 }
 
 // stages
-void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count, const int& PC_branch) {
-
-        IR =  ICache[PC]; 
-        PC = PC_branch; // not doing +2
-        int _opcode = IR >> 12;
-        if (_opcode == 13 || _opcode == 14) {
-            stall_count += 2;
-        }
+void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count, int& PC_branch) {
+    IR =  ICache[PC]; 
+    PC = PC_branch; // not doing +2
+    int _opcode = IR >> 12;
+    if (_opcode == 13 || _opcode == 14) {
+        stall_count += 2;
+    }
 }
 
 void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& stall_count, std::pair<int, int> instruction_metadata[]) {
@@ -252,11 +260,10 @@ void simulate(std::string directory) {
     // local variables
     int opcode, rd, rs1, rs2;
 
-    for(int j = 0; j < 5; j++){
+    for (int j = 0; j < 5; j++) {
         instruction_metadata[j] = get_metadata(ICache[0]);
     }
     
-
     while (!halt) {
         // all instructions except IF run as usual
 
@@ -289,7 +296,7 @@ void simulate(std::string directory) {
 
             instruction_metadata[2] = instruction_metadata[1];
         }
-        else if (clock <= 1){
+        else if (clock <= 1) {
             PC_branch++;
         }
 
@@ -299,13 +306,15 @@ void simulate(std::string directory) {
             rd = instruction_metadata[1].second;
 
             decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
-            if(stall_count){
+            if (stall_count) {
                 instruction_fetch(ICache, PC, IR, stall_count, PC_branch);
             }
         }
 
         // IF for this cycle
-        if(stall_count == 0) instruction_fetch(ICache, PC, IR, stall_count, PC_branch); // IR = ICache[PC], PC++ 
+        if (stall_count == 0) {
+            instruction_fetch(ICache, PC, IR, stall_count, PC_branch); // IR = ICache[PC], PC++ 
+        }
 
         if (stall_count > 0) {
             stall_count--;
@@ -314,7 +323,7 @@ void simulate(std::string directory) {
             instruction_metadata[0] = get_metadata(ICache[PC]); // to ensure correctness
         }
         clock++;
-        std::cout<< IR <<std::endl;
+        std::cout << IR << std::endl;
     }
 
     // setup outputfiles 
@@ -324,15 +333,16 @@ void simulate(std::string directory) {
     // write data
     fill_data_cache(dcache_output, DCache);
     fill_output(output, output_metrics);
-    
 }
 
 int main() {
-    std::string path = "./input";
+/*    std::string path = "./input";
     for (auto& entry : std::filesystem::directory_iterator(path)) {
         if (entry.is_directory()) {
             std::string directory = entry.path().filename().string();
             simulate(directory);
         }
     }
+*/
+    simulate("Arith");
 }
