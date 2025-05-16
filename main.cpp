@@ -19,7 +19,7 @@ void get_data(int type, std::ifstream& input_file, T arr[]) {
     int j = 0;
     std::string data;
     while (input_file >> data) {
-        if (type == 1) {
+        if (type == 1) { // data is stored in big-endian format
             arr[j] = convert_to_decimal<int>(data) << 8;
             input_file >> data;
             arr[j] += convert_to_decimal<int>(data);
@@ -90,7 +90,7 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
     opcode = instruction;
 
     bool RAW = false;
-    if (opcode != 10 && opcode != 13 && opcode != 15) { // if the instrution doesn't have any source registers
+    if (opcode != 10 && opcode != 13 && opcode != 15) { // if the instruction has at least one source register
         // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
         for (int j = 2; j < 5; j++) { // the earlier the better 
             int _rd = instruction_metadata[j].second;
@@ -162,7 +162,7 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, in
             ALUOuput = A << get_imm_4(rs2);
             break;
         case 9:                           // SRLI
-            ALUOuput = A >> get_imm_4(rs2);
+            ALUOuput = (uint8_t)A >> get_imm_4(rs2);
             break;
         case 10:                          // LI
             imm = (rs1 << 4) + rs2;
