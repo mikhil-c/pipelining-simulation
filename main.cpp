@@ -91,7 +91,7 @@ void instruction_fetch(int ICache[], int& PC, int& IR, int& control_stall_count,
     }
 }
 
-void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& stall_count, std::tuple<int, int, int8_t> instruction_metadata[]) {
+void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int& opcode, int& rd, int& rs1, int& rs2, int& RAW_stall_count, std::tuple<int, int, int8_t> instruction_metadata[]) {
     // extracting rs2
     rs2 = instruction % 16;
     instruction >>= 4;
@@ -108,29 +108,40 @@ void decode_instruction(int instruction, int8_t RF[], int8_t& A, int8_t& B, int&
     opcode = instruction;
 
     bool RAW = false;
-    if (opcode != 10 && opcode != 13 && opcode != 15) { // if the instruction has at least one source register
+    if (opcode != 10 && opcode != 13 && opcode != 15) { // instructions with at least one source register
         // check if any instruction in 2 3 4 induces a dependency in ID, set metadata appropriately
         for (int j = 2; j < 5; j++) { // the earlier the better 
             int _rd = std::get<1>(instruction_metadata[j]);
-            if (_rd != 0) { // don't stall if _rd = 0
+            int _opcode = std::get<0>(instruction_metadata[j]);
+            if (_rd == -1 || _opcode == -1) {
+                continue;
+            }
+            if (_opcode < 12 && _rd != 0) { // don't stall if the instruction doesn't write to _rd or if _rd is 0
                 if (opcode < 3 || (opcode > 3 && opcode < 7)) { // instructions with two source registers (rs1 & rs2)
                    if (_rd == rs1 || _rd == rs2) {
                        RAW = true;
-                       stall_count = 5 - j;
+                       RAW_stall_count = 5 - j;
                        break;
                    } 
                 }
-                else if (opcode == 3 || opcode == 14) { // instructions with rd as its source register
+                else if (opcode == 12) { // instruction with two source registers (rd & rs1)
+                    if (_rd == rd || _rd == rs1) {
+                        RAW = true;
+                        RAW_stall_count = 5 - j;
+                        break;
+                    }
+                }
+                else if (opcode == 3 || opcode == 14) { // instructions with only one source register (rd)
                     if (_rd == rd) {
                         RAW = true;
-                        stall_count = 5 - j;
+                        RAW_stall_count = 5 - j;
                         break;
                     }
                 }
                 else { // instructions with only one source register (rs1)
                     if (_rd == rs1) {
                         RAW = true;
-                        stall_count = 5 - j;
+                        RAW_stall_count = 5 - j;
                         break;
                     }
                 }
@@ -302,7 +313,7 @@ void simulate(std::string directory) {
             instruction_metadata[4] = instruction_metadata[3];
             instruction_metadata[3] = std::make_tuple(-1, -1, -1);
         }
-
+        if (RAW_stall_count == 0) {
         // execute stage
         if (instruction_metadata[2] != std::make_tuple(-1, -1, -1)) {
 /*            opcode = instruction_metadata[2].first;
@@ -320,7 +331,7 @@ void simulate(std::string directory) {
         if (instruction_metadata[1] != std::make_tuple(-1, -1, -1)) {
 /*            opcode = instruction_metadata[1].first;
             rd = instruction_metadata[1].second;*/
-            decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, stall_count, instruction_metadata);
+            decode_instruction(IR, RF, A, B, opcode, rd, rs1, rs2, RAW_stall_count, instruction_metadata);
             instruction_metadata[2] = instruction_metadata[1];
             instruction_metadata[1] = std::make_tuple(-1, -1, -1);
 /*            if (stall_count) {
@@ -339,6 +350,12 @@ void simulate(std::string directory) {
                 control_stall_count--;
             }
             instruction_metadata[0] = std::make_tuple(-1, -1, -1);
+        }
+        }
+        else {
+            RAW_stall_count--;
+            A = RF[rs1];
+            B = RF[rs2];
         }
 /*
         if (stall_count > 0) {
@@ -367,7 +384,6 @@ int main() {
             std::string directory = entry.path().filename().string();
             simulate(directory);
         }
-    }
-*/
-    simulate("Control");
+    } */
+    simulate("SimpleLoadAdd");
 }
