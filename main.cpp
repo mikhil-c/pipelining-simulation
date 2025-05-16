@@ -75,15 +75,19 @@ void fill_output(std::ofstream& output, int output_metrics[]) {
 }
 
 // stages
-void instruction_fetch(int ICache[], int& PC, int& IR, int& stall_count, int& PC_branch, bool& halt) {
+void instruction_fetch(int ICache[], int& PC, int& IR, int& control_stall_count, int& PC_branch, bool& halt) {
+    // difference between the addresses of consecutive instructions is 1 instead of 2
     IR = ICache[PC]; 
-    PC++; // not doing +2
     int _opcode = IR >> 12;
     if (_opcode == 15) {
         halt = true;
+        PC++;
     }
-    if (_opcode == 13 || _opcode == 14) {
-        stall_count += 2;
+    else if (_opcode == 13 || _opcode == 14) {
+        control_stall_count += 2;
+    }
+    else {
+        PC++;
     }
 }
 
@@ -145,8 +149,7 @@ int8_t get_imm_4(int& num) {
     return num < 8 ? num : 16 - num; 
 }
 
-void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, const int& PC, bool& halt, int& opcode, int& rd, int& rs1, int&rs2, int& PC_branch) {
-    PC_branch = PC + 1;
+void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, int& PC, bool& halt, int& opcode, int& rd, int& rs1, int&rs2, int& PC_branch) {
     int8_t imm = 0;
     switch (opcode) {
         case 0:                           // ADD
@@ -189,12 +192,15 @@ void execute_instruction(int8_t RF[], int8_t& A, int8_t& B, int8_t& ALUOuput, co
             break;
         case 13:                          // JMP
             imm = (rd << 4) + rs1;
-            PC_branch = PC + imm;
+            PC += imm;
             break;
         case 14:                          // BEQZ
             imm = (rs1 << 4) + rs2;
             if (RF[rd] == 0) {
-                PC_branch = PC + imm;
+                PC += imm;
+            }
+            else {
+                PC++;
             }
             break;
         case 15:                          // HLT
@@ -324,9 +330,14 @@ void simulate(std::string directory) {
 
         // IF for this cycle
         if (!halt) {
-            instruction_metadata[0] = get_metadata(ICache[PC]);
-            instruction_fetch(ICache, PC, IR, stall_count, PC_branch, halt); // IR = ICache[PC], PC++ 
-            instruction_metadata[1] = instruction_metadata[0];
+            if (control_stall_count == 0) {
+                instruction_metadata[0] = get_metadata(ICache[PC]);
+                instruction_fetch(ICache, PC, IR, control_stall_count, PC_branch, halt); // IR = ICache[PC], PC++ 
+                instruction_metadata[1] = instruction_metadata[0];
+            }
+            else {
+                control_stall_count--;
+            }
             instruction_metadata[0] = std::make_tuple(-1, -1, -1);
         }
 /*
@@ -358,5 +369,5 @@ int main() {
         }
     }
 */
-    simulate("SimpleAdd");
+    simulate("Control");
 }
