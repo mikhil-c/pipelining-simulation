@@ -2,9 +2,9 @@
 #include <string>
 #include <cstdint>
 #include <tuple>
-#include <filesystem>
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <iomanip>
 
 // file handling functions
@@ -48,6 +48,12 @@ std::string convert_to_hex(int8_t num) {
 void fill_data_cache(std::ofstream& dcache_ouptut, int8_t dcache[]) {
     for (int j = 0; j < 256; j++) {
         dcache_ouptut << convert_to_hex(dcache[j]) << "\n"; // convert to hexadecimal and output 
+    }
+}
+
+void fill_reg_file(std::ofstream& reg_file_output, int8_t RF[]) {
+    for (int j = 0; j < 16; j++) {
+        reg_file_output << convert_to_hex(RF[j]) << "\n";
     }
 }
 
@@ -379,22 +385,16 @@ void simulate(std::string directory) {
 
     // setup output files 
     std::ofstream dcache_output("./output/" + directory + "/DCache.txt");
+    std::ofstream reg_file_output("./output/" + directory + "/RF.txt");
     std::ofstream output("./output/" + directory + "/Output.txt");
 
     // write data
     fill_data_cache(dcache_output, DCache);
+    fill_reg_file(reg_file_output, RF);
     fill_output(output, output_metrics, clock);
 }
 
-int main() {
-    std::string path = "./input";
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (entry.is_directory()) {
-            std::string directory = entry.path().filename().string();
-            if (directory == "MaxShift" || directory == "Sample1" || directory == "Sample2" || directory == "Sample3") {
-                continue;
-            }
-            simulate(directory);
-        }
-    }
+int main(int argc, char* argv[]) {
+    std::string directory = argv[1];
+    simulate(directory);
 }
