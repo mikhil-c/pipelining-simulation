@@ -95,6 +95,10 @@ int main() {
     int j = 0;
     std::string instruction;
     while (std::getline(program, instruction)) {
+        // skip empty or whitespace-only lines
+        if (instruction.empty() || std::all_of(instruction.begin(), instruction.end(), ::isspace)) {
+            continue;
+        }       
         std::transform(instruction.begin(), instruction.end(), instruction.begin(), [] (unsigned char c) {
             return std::tolower(c);
         });
@@ -102,6 +106,9 @@ int main() {
         uint8_t data;
         std::string opcode, rd, rs1, rs2;
         instrStream >> opcode;
+        if (opcode == "#") {
+            continue;
+        }
         if (opcode == "add" || opcode == "sub" || opcode == "mul" || opcode == "and" || opcode == "or" || opcode == "xor") {
             instrStream >> rd;
             data = (opcode_to_int(opcode) << 4) + reg_to_int(rd);
@@ -174,7 +181,7 @@ int main() {
         }
     }
 
-    // setup output files
+    // setup output file
     std::ofstream icache_output("./input/Program/ICache.txt");
 
     // write data
