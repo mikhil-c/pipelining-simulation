@@ -1,4 +1,4 @@
-This project simulates a 5-stage pipelined CPU with hazard support and was jointly done by [Shivanshu](https://github.com/123shivanshukumar) and [Mikhil](https://github.com/Mikhil-C). 
+This project simulates a 5-stage pipelined CPU with hazard support and was jointly done by [Shivanshu](https://github.com/123shivanshukumar) and [Mikhil](https://github.com/mikhil-c). 
 
 # Overview
 `simulate.cpp` runs a simulator to simulate pipelined processing on a binary with the following features:
@@ -85,7 +85,7 @@ hlt
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/123shivanshukumar/Pipelining_simulation.git
+git clone https://github.com/mikhil-c/pipelining-simulation.git
 cd Pipelining_simulation
 ```
 
